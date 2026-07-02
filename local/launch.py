@@ -14,14 +14,30 @@ from huggingface_hub import hf_hub_download, list_repo_files
 
 QWY_REPO = "empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF"
 ORN_REPO = "deepreinforce-ai/Ornith-1.0-9B-GGUF"
+# exact filenames (verified on Kaggle runs) — skips the flaky list_repo_files API call
+KNOWN = {QWY_REPO: "Qwythos-9B-Claude-Mythos-5-1M-MTP-Q4_K_M.gguf",
+         ORN_REPO: "ornith-1.0-9b-Q4_K_M.gguf"}
 QWY_PORT, ORN_PORT = 8080, 8081
 
 
 def get_gguf(repo: str, prefer: str = "q4_k_m") -> str:
-    fs = [f for f in list_repo_files(repo) if f.lower().endswith(".gguf")]
-    pick = ([f for f in fs if prefer in f.lower()] or [f for f in fs if "q4" in f.lower()] or fs)[0]
-    print(f"  {repo} -> {pick}")
-    return hf_hub_download(repo, pick)
+    last = None
+    for attempt in range(5):                      # WinError 10054 = transient reset; retry
+        try:
+            if repo in KNOWN:
+                print(f"  {repo} -> {KNOWN[repo]}")
+                return hf_hub_download(repo, KNOWN[repo])
+            fs = [f for f in list_repo_files(repo) if f.lower().endswith(".gguf")]
+            pick = ([f for f in fs if prefer in f.lower()]
+                    or [f for f in fs if "q4" in f.lower()] or fs)[0]
+            print(f"  {repo} -> {pick}")
+            return hf_hub_download(repo, pick)
+        except Exception as e:
+            last = e
+            print(f"  attempt {attempt+1}/5 failed ({str(e)[:80]}) — retrying in {2**attempt}s")
+            time.sleep(2 ** attempt)
+    raise SystemExit(f"could not download from {repo}: {last}\n"
+                     f"Tip: set HF_ENDPOINT=https://hf-mirror.com and retry if HF is blocked/flaky.")
 
 
 def start_server(model_path: str, port: int, gpu: bool, ctx: int = 16384) -> subprocess.Popen:

@@ -45,16 +45,22 @@ async def chat(req: Request):
             {"role": "system", "content": "You are a senior planning engineer. Write a SHORT "
              "numbered plan (3-6 steps) for the task. Concrete files/steps. No code."},
             {"role": "user", "content": first_user[:6000]}],
-            "max_tokens": 400, "temperature": 0.3}, timeout=600)
-        PLANS[fp] = strip_think(r.json()["choices"][0]["message"]["content"])
+            "max_tokens": 600, "temperature": 0.3,
+            "chat_template_kwargs": {"enable_thinking": False}}, timeout=600)
+        pm = r.json()["choices"][0]["message"]
+        # thinking-mode models put text in reasoning_content and leave content empty
+        PLANS[fp] = strip_think(pm.get("content") or pm.get("reasoning_content") or "")
         print(f"[plan] {PLANS[fp][:200]}", flush=True)
     fwd = dict(body)
     fwd["messages"] = [{"role": "system",
                         "content": "Follow this plan from your planning partner:\n" + PLANS[fp]}] + msgs
     fwd.pop("model", None)
+    fwd["chat_template_kwargs"] = {"enable_thinking": False}  # doer: answer, don't ruminate
     out = requests.post(ORN, json=fwd, timeout=1200).json()
     try:
         m = out["choices"][0]["message"]
+        if not m.get("content") and not m.get("tool_calls"):
+            m["content"] = m.get("reasoning_content") or ""   # thinking-mode fallback
         if m.get("content"):
             m["content"] = strip_think(m["content"])
     except Exception:

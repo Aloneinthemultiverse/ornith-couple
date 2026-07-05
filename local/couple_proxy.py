@@ -15,8 +15,11 @@ import requests
 import uvicorn
 from fastapi import FastAPI, Request
 
-QWY = "http://127.0.0.1:8080/v1/chat/completions"   # planner
-ORN = "http://127.0.0.1:8081/v1/chat/completions"   # doer (tools)
+import os
+# Split-brain across machines: set env vars to point at another laptop, e.g.
+#   set ORN_URL=http://100.101.5.23:8081   (friend's Tailscale IP running Ornith)
+QWY = os.environ.get("QWY_URL", "http://127.0.0.1:8080") + "/v1/chat/completions"  # planner
+ORN = os.environ.get("ORN_URL", "http://127.0.0.1:8081") + "/v1/chat/completions"  # doer (tools)
 
 app = FastAPI()
 PLANS: dict[int, str] = {}

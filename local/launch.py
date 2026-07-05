@@ -40,9 +40,15 @@ def get_gguf(repo: str, prefer: str = "q4_k_m") -> str:
                      f"Tip: set HF_ENDPOINT=https://hf-mirror.com and retry if HF is blocked/flaky.")
 
 
+import os
+LLAMA_BIN = os.environ.get(
+    "LLAMA_SERVER",
+    r"C:\Users\Sujit Narrayan M\vibe-thinker\runtime\bin\llama-server.exe")  # Vulkan build
+
+
 def start_server(model_path: str, port: int, gpu: bool, ctx: int = 16384) -> subprocess.Popen:
     ngl = "99" if gpu else "0"
-    cmd = ["llama-server", "-m", model_path, "--port", str(port), "--ctx-size", str(ctx),
+    cmd = [LLAMA_BIN, "-m", model_path, "--port", str(port), "--ctx-size", str(ctx),
            "-ngl", ngl, "--jinja"]  # --jinja enables chat template + TOOL CALLS
     print("$", " ".join(cmd))
     return subprocess.Popen(cmd)

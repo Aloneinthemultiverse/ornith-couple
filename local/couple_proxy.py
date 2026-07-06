@@ -14,6 +14,7 @@ import re
 import requests
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.responses import StreamingResponse
 
 import os
 # Split-brain across machines: set env vars to point at another laptop, e.g.
@@ -50,12 +51,22 @@ async def chat(req: Request):
         pm = r.json()["choices"][0]["message"]
         # thinking-mode models put text in reasoning_content and leave content empty
         PLANS[fp] = strip_think(pm.get("content") or pm.get("reasoning_content") or "")
-        print(f"[plan] {PLANS[fp][:200]}", flush=True)
+        print(f"[plan] {PLANS[fp][:200]}".encode("ascii", "replace").decode(), flush=True)
     fwd = dict(body)
-    fwd["messages"] = [{"role": "system",
-                        "content": "Follow this plan from your planning partner:\n" + PLANS[fp]}] + msgs
+    plan_note = "\n\n[Plan from your planning partner:\n" + PLANS[fp] + "]"
+    msgs2 = [dict(m) for m in msgs]
+    if msgs2 and msgs2[0].get("role") == "system":
+        msgs2[0]["content"] = str(msgs2[0].get("content") or "") + plan_note  # merge: ONE system msg, stays first
+    else:
+        msgs2 = [{"role": "system", "content": "You are a coding agent." + plan_note}] + msgs2
+    fwd["messages"] = msgs2
     fwd.pop("model", None)
     fwd["chat_template_kwargs"] = {"enable_thinking": False}  # doer: answer, don't ruminate
+    if body.get("stream"):
+        # OpenCode/AI-SDK clients require SSE streaming — pass the doer's stream through raw
+        r = requests.post(ORN, json=fwd, stream=True, timeout=1200)
+        return StreamingResponse(r.iter_content(chunk_size=None),
+                                 media_type="text/event-stream")
     out = requests.post(ORN, json=fwd, timeout=1200).json()
     try:
         m = out["choices"][0]["message"]
